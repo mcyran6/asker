@@ -1,0 +1,4 @@
+.env
+conv
+__pycache__/
+code_artifacts/*
