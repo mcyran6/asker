@@ -37,7 +37,7 @@ class ClaudeClient:
             'sonnet': 'claude-3-5-sonnet-20241022',
             'haiku': 'claude-3-haiku-20240307'
         }
-        
+        self.limit = 512 
         self.model = self.models['haiku']  # Default model
 
     def set_model(self, model_key: str):
@@ -45,6 +45,9 @@ class ClaudeClient:
             self.model = self.models[model_key]
         else:
             raise ValueError(f"Invalid model key: {model_key}")
+
+    def set_limit(self, lim: int):
+        self.limit = lim
 
     def print_log(self):
         # Create the "conv" directory if it doesn't exist
@@ -68,7 +71,7 @@ class ClaudeClient:
 
         print(f"Conversation log saved to: {file_path}")
 
-    def generate_response(self, prompt: str, max_tokens: int = 1024) -> str:
+    def generate_response(self, prompt: str) -> str:
         """
         Generate a response from Claude
         
@@ -85,7 +88,7 @@ class ClaudeClient:
         try:
             message = self.client.messages.create(
                 model=self.model,
-                max_tokens=max_tokens,
+                max_tokens=self.limit,
                 messages=self.message_list
             )
             computer_response={"role":"assistant","content":message.content[0].text}
@@ -95,7 +98,7 @@ class ClaudeClient:
         except anthropic.APIError as e:
             raise Exception(f"API error occurred: {str(e)}")
 
-    def stream_response(self, prompt: str, max_tokens: int = 1024):
+    def stream_response(self, prompt: str):
         """
         Stream a response from Claude
         
@@ -111,7 +114,7 @@ class ClaudeClient:
         try:
             with self.client.messages.stream(
                 model=self.model,
-                max_tokens=max_tokens,
+                max_tokens=self.limit,
                 messages=self.message_list
             ) as stream:
                 full_text = ""
@@ -173,7 +176,33 @@ class ClaudeClient:
                 }
             except UnicodeDecodeError:
                 raise ValueError(f"File {file_path}appears to be binary and not an image. Only text and image files are supported.")
-     
+
+    def attach_file(self, file_paths: Union[str,List[str]]):
+        """
+        Add the file to the message_list before the prompt gets sent
+        """
+        if isinstance(file_paths, str):
+            file_paths = [file_paths]
+            
+        try:
+            content_list = []
+            # Add each file's content
+            for file_path in file_paths:
+                content_list.append(self._prepare_file_content(file_path)) 
+            
+            file_input = {
+                "role":"user",
+                "content":content_list
+            }
+            self.message_list.append(file_input)
+            confirm = {
+                "role":"assistant",
+                "content":"Thank you for sharing "+file_path+" with me. I understand it to be a file named "+file_path+" from your computer, and copied into the message window. However, I will consider to it as being 'imported'. What else can I help you with?"
+            }
+            self.message_list.append(confirm)
+        except Exception as e:
+            raise Exception(f"Error processing files: {str(e)}")
+
     def send_file(self, prompt: str, file_paths: Union[str, List[str]], max_tokens: int = 1024) -> str:
         """
         Generate a response from Claude with file attachments
@@ -221,7 +250,7 @@ class ClaudeClient:
             # Create message with files
             message = self.client.messages.create(
                 model=self.model,
-                max_tokens=max_tokens,
+                max_tokens=self.limit,
                 messages=self.message_list
             )
             computer_response={"role":"assistant","content":message.content[0].text}
