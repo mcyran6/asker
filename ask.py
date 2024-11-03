@@ -24,18 +24,13 @@ def parse_commands(command,client):
         
         # Perform the appropriate action based on the keyword
         if words[0] == "import":
-            if os.path.isfile(arg):
-                file_size = os.path.getsize(arg)
-                if file_size > 5 * 1024 * 1024:
-                    print("File size exceeds 5MB.")
-                else:
-                    client.attach_file(arg)
+            import_string(arg,client)
         elif words[0] == "model":
             client.set_model(arg)
         elif words[0] == "lim":
             client.set_limit(int(arg))
         elif words[0] == "help":
-            print(keywords)
+            print_help_message()
         
         # Remove the first two words from the command
         newwords = []
@@ -48,33 +43,41 @@ def parse_commands(command,client):
     else:
         return command
 
-
-def parse_file(user_input):
-    # Check if the input contains the word "import"
-    words = user_input.split()
-    if "import" in words[0]:
-        # Extract the file path after the word "import"
-        file_path = words[1]
-        prompt = " ".join(words[2:])
-        #print(words)
-        #print(prompt)
-        # Check if the file exists
-        if os.path.isfile(file_path):
-            # Get the file size in bytes
-            file_size = os.path.getsize(file_path)
-            
-            # Check if the file size is larger than 5MB (5 * 1024 * 1024 bytes)
+def import_string(input_string,client):
+    # Check if the input string has commas
+    if ',' in input_string:
+        # Split the string by commas and process each part individually
+        parts = input_string.split(',')
+        for part in parts:
+            # Run the command on each part
+            if os.path.isfile(part):
+                file_size = os.path.getsize(part)
+                if file_size > 5 * 1024 * 1024:
+                    print("File size exceeds 5MB.")
+                else:
+                    client.attach_file(part)
+            print(f"Processing: {part.strip()}")
+    else:
+        # Run the command on the entire string
+        if os.path.isfile(input_string):
+            file_size = os.path.getsize(input_string)
             if file_size > 5 * 1024 * 1024:
                 print("File size exceeds 5MB.")
             else:
-                return file_path, prompt
-                #with open(file_path, 'r') as file:
-                #    file_contents = file.read()
-                #    print("File contents:")
-                #    print(file_contents)
-        else:
-            print("File does not exist.")
-    return "",user_input
+                client.attach_file(input_string)
+        print(f"Processing: {input_string}")
+
+def print_help_message():
+    """Prints the usage information for the command line app."""
+    print("Usage:")
+    print("  import <file1>[,<file2>,...]")
+    print("    Import one or more files.")
+    print("  model <model_name>")
+    print("    Override the default haiku model.")
+    print("  lim <max_words>")
+    print("    Set the limit for the number of words in the response.")
+    print("  help")
+    print("    Display this help message.")
 
 def save_code_artifacts(api_response):
     # Create a directory to store the code artifacts
