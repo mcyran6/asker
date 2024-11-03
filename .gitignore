@@ -1,4 +1,5 @@
 .env
 conv
+claude/
 __pycache__/
 code_artifacts/*
