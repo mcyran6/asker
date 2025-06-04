@@ -1,90 +1,66 @@
-from chatapi import ClaudeClient
+import argparse
+from chatapi import LLMClient
 import os
 import re
 
-lim=512
-keywords = ["import", "model", "lim", "help"] 
+lim = 512
+keywords = ["import", "model", "lim", "help"]
 quitwords = ["exit", "quit", "thanks", "thank you"]
 
-# Define a function to parse the command
-def parse_commands(command,client):
-    # Split the command into a list of words
+def parse_commands(command, client):
     if command in quitwords:
         print("Goodbye")
         return False
 
     words = command.split()
-     
-    # Check if the first word is a keyword
+    if not words:
+        return ""
+
     if words[0] in keywords:
-        # Get the argument (second word)
-        arg = ""
-        if len(words)>1:
-            arg = words[1]
-        
-        # Perform the appropriate action based on the keyword
+        arg = words[1] if len(words) > 1 else ""
+
         if words[0] == "import":
-            import_string(arg,client)
+            import_string(arg, client)
         elif words[0] == "model":
-            client.set_model(arg)
+            try:
+                client.set_model(arg)
+            except ValueError as e:
+                print(e)
         elif words[0] == "lim":
             client.set_limit(int(arg))
         elif words[0] == "help":
             print_help_message()
-        
-        # Remove the first two words from the command
-        newwords = []
-        if len(words)>2:
-            newwords = words[2:]
-        else:
-            return ""
-        # Recursively call the function with the remaining words
-        return parse_commands(" ".join(newwords),client)
+
+        newwords = words[2:] if len(words) > 2 else []
+        return parse_commands(" ".join(newwords), client)
     else:
         return command
 
-def import_string(input_string,client):
-    # Check if the input string has commas
-    if ',' in input_string:
-        # Split the string by commas and process each part individually
-        parts = input_string.split(',')
-        for part in parts:
-            # Run the command on each part
-            if os.path.isfile(part):
-                file_size = os.path.getsize(part)
-                if file_size > 5 * 1024 * 1024:
-                    print("File size exceeds 5MB.")
-                else:
-                    client.attach_file(part)
-            print(f"Processing: {part.strip()}")
-    else:
-        # Run the command on the entire string
-        if os.path.isfile(input_string):
-            file_size = os.path.getsize(input_string)
-            if file_size > 5 * 1024 * 1024:
+def import_string(input_string, client):
+    files = [f.strip() for f in input_string.split(',')] if ',' in input_string else [input_string]
+    for file_path in files:
+        if os.path.isfile(file_path):
+            if os.path.getsize(file_path) > 5 * 1024 * 1024:
                 print("File size exceeds 5MB.")
             else:
-                client.attach_file(input_string)
-        print(f"Processing: {input_string}")
+                client.attach_file(file_path)
+        print(f"Processing: {file_path}")
 
 def print_help_message():
-    """Prints the usage information for the command line app."""
     print("Usage:")
     print("  import <file1>[,<file2>,...]")
     print("    Import one or more files.")
     print("  model <model_name>")
-    print("    Override the default haiku model.")
+    print("    Override the default model.")
     print("  lim <max_words>")
     print("    Set the limit for the number of words in the response.")
     print("  help")
     print("    Display this help message.")
 
 def save_code_artifacts(api_response):
-    # Create a directory to store the code artifacts
     artifact_dir = "code_artifacts"
     os.makedirs(artifact_dir, exist_ok=True)
 
-    # Regular expression patterns to match different file types
     patterns = {
         "py": r"```python\n(.*?)\n```",
         "txt": r"```text\n(.*?)\n```",
@@ -95,30 +71,38 @@ def save_code_artifacts(api_response):
     }
 
     for file_type, pattern in patterns.items():
-        # Find all code blocks of the current file type in the API response
         code_blocks = re.findall(pattern, api_response, re.DOTALL)
-
-        # Save each code block as a separate file
         for i, code_block in enumerate(code_blocks):
-            file_name = f"code_artifact_{i+1}.{file_type}"
-            file_path = os.path.join(artifact_dir, file_name)
-
-            with open(file_path, "w", encoding='utf-8') as file:
-                file.write(code_block.strip())
-
-            print(f"{file_type.capitalize()} code artifact saved: {file_path}")
+            file_path = os.path.join(artifact_dir, f"code_artifact_{i+1}.{file_type}")
+            with open(file_path, "w", encoding='utf-8') as f:
+                f.write(code_block.strip())
+            print(f"{file_type.upper()} saved to: {file_path}")
 
 def main():
-    client = ClaudeClient()
+    parser = argparse.ArgumentParser(description="Chat with OpenRouter-backed LLMs")
+    parser.add_argument("--model", type=str, default="gpt4o", help="Model to use (e.g. gpt4o, claude, mixtral)")
+    args = parser.parse_args()
+
+    client = LLMClient()
+
+    try:
+        client.set_model(args.model)
+    except ValueError as e:
+        print(f"⚠️ {e}")
+        print("Available models:")
+        for key in client.models.keys():
+            print(f"  - {key}")
+        return
+
+    model_name = args.model
     while True:
-        prompt = input("How can claude help you today?")    
-        
-        prompt = parse_commands(prompt, client) 
+        prompt = input(f"How can {model_name} help you today? ")
+        prompt = parse_commands(prompt, client)
         if not prompt:
             client.print_log()
             break
 
-        if prompt!="":
+        if prompt != "":
             response = ""
             for chunk in client.stream_response(prompt):
                 response += chunk
